@@ -1,0 +1,525 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>画像変換ツール / Image Converter</title>
+<script src="https://cdn.jsdelivr.net/npm/heic2any@0.0.4/dist/heic2any.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Hiragino Sans", "Microsoft YaHei", "Malgun Gothic", sans-serif;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+  }
+  .container {
+    background: #fff;
+    border-radius: 20px;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+    padding: 35px 28px;
+    max-width: 540px;
+    width: 100%;
+    text-align: center;
+  }
+  .lang-bar {
+    display: flex;
+    justify-content: flex-end;
+    margin-bottom: 12px;
+  }
+  #langSelect {
+    padding: 6px 10px;
+    border-radius: 8px;
+    border: 1px solid #ddd;
+    font-size: 0.85rem;
+    cursor: pointer;
+    color: #555;
+  }
+  h1 { font-size: 1.5rem; color: #333; margin-bottom: 8px; }
+  .subtitle { color: #888; font-size: 0.9rem; margin-bottom: 22px; }
+
+  .section-label {
+    text-align: left;
+    font-size: 0.8rem;
+    color: #999;
+    margin: 16px 0 6px;
+    font-weight: bold;
+  }
+  .format-buttons { display: flex; gap: 10px; justify-content: center; }
+  .format-btn {
+    flex: 1;
+    padding: 10px;
+    border: 2px solid #ddd;
+    border-radius: 10px;
+    background: #fff;
+    cursor: pointer;
+    font-size: 1rem;
+    font-weight: bold;
+    color: #666;
+    transition: all 0.2s;
+  }
+  .format-btn.active { border-color: #667eea; background: #667eea; color: #fff; }
+
+  .slider-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    background: #f8f9ff;
+    padding: 12px 15px;
+    border-radius: 10px;
+  }
+  .slider-row label { font-size: 0.85rem; color: #555; white-space: nowrap; }
+  .slider-row input[type="range"] { flex: 1; accent-color: #667eea; }
+  .slider-val { font-size: 0.85rem; color: #667eea; font-weight: bold; min-width: 48px; text-align: right; }
+
+  .resize-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: #f8f9ff;
+    padding: 12px 15px;
+    border-radius: 10px;
+    flex-wrap: wrap;
+  }
+  .resize-row label { font-size: 0.85rem; color: #555; }
+  .resize-row select, .resize-row input[type="number"] {
+    padding: 6px 8px;
+    border-radius: 8px;
+    border: 1px solid #ddd;
+    font-size: 0.85rem;
+  }
+  .resize-row input[type="number"] { width: 90px; }
+
+  .drop-zone {
+    border: 3px dashed #667eea;
+    border-radius: 15px;
+    padding: 38px 20px;
+    cursor: pointer;
+    transition: all 0.2s;
+    background: #f8f9ff;
+    margin-top: 18px;
+  }
+  .drop-zone:hover, .drop-zone.dragover { background: #eef0ff; border-color: #764ba2; }
+  .drop-zone .icon { font-size: 3rem; margin-bottom: 10px; }
+  .drop-zone p { color: #666; font-size: 0.95rem; }
+  .drop-zone .small { font-size: 0.8rem; color: #aaa; margin-top: 8px; }
+  #fileInput { display: none; }
+
+  .actions { display: none; gap: 10px; margin-top: 18px; }
+  .actions.show { display: flex; }
+  .action-btn {
+    flex: 1;
+    padding: 12px;
+    border: none;
+    border-radius: 10px;
+    cursor: pointer;
+    font-size: 0.9rem;
+    font-weight: bold;
+    transition: all 0.2s;
+  }
+  .zip-btn { background: #667eea; color: #fff; }
+  .zip-btn:hover { background: #5568d3; }
+  .clear-btn { background: #f0f0f0; color: #777; }
+  .clear-btn:hover { background: #e0e0e0; }
+
+  .results { margin-top: 18px; text-align: left; }
+  .result-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: #f5f5f5;
+    padding: 12px 15px;
+    border-radius: 10px;
+    margin-bottom: 10px;
+    font-size: 0.85rem;
+  }
+  .result-info { overflow: hidden; max-width: 62%; }
+  .result-info .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #444; }
+  .result-info .size { font-size: 0.72rem; color: #aaa; margin-top: 2px; }
+  .download-btn {
+    background: #667eea; color: #fff; border: none;
+    padding: 8px 16px; border-radius: 8px; cursor: pointer;
+    font-size: 0.85rem; text-decoration: none; white-space: nowrap;
+  }
+  .download-btn:hover { background: #5568d3; }
+  .status { color: #f39c12; font-size: 0.8rem; }
+  .error { color: #e74c3c; font-size: 0.8rem; }
+  .footer { margin-top: 22px; font-size: 0.75rem; color: #aaa; }
+</style>
+</head>
+<body>
+  <div class="container">
+    <div class="lang-bar">
+      <select id="langSelect"></select>
+    </div>
+
+    <h1 id="t-title">📷 画像変換ツール</h1>
+    <p class="subtitle" id="t-subtitle">iPhoneのHEIC写真を JPEG / PNG へ変換</p>
+
+    <div class="section-label" id="t-formatLabel">出力フォーマット</div>
+    <div class="format-buttons">
+      <button class="format-btn active" data-format="jpeg">JPEG</button>
+      <button class="format-btn" data-format="png">PNG</button>
+    </div>
+
+    <div class="section-label" id="t-qualityLabel">画質</div>
+    <div class="slider-row">
+      <label id="t-qualityLow">低</label>
+      <input type="range" id="qualitySlider" min="10" max="100" value="92">
+      <label id="t-qualityHigh">高</label>
+      <span class="slider-val" id="qualityVal">92%</span>
+    </div>
+
+    <div class="section-label" id="t-resizeLabel">リサイズ（任意）</div>
+    <div class="resize-row">
+      <label id="t-resizeMode" for="resizeMode"></label>
+      <select id="resizeMode">
+        <option value="none">—</option>
+        <option value="maxwidth">Max Width (px)</option>
+        <option value="maxheight">Max Height (px)</option>
+        <option value="percent">%</option>
+      </select>
+      <input type="number" id="resizeValue" min="1" placeholder="例: 1920" style="display:none;">
+    </div>
+
+    <div class="drop-zone" id="dropZone">
+      <div class="icon">⬆️</div>
+      <p id="t-dropText">ここに画像をドラッグ＆ドロップ<br>またはタップして選択</p>
+      <p class="small" id="t-supportText">HEIC / HEIF / PNG / JPEG / WebP 対応</p>
+    </div>
+    <input type="file" id="fileInput" accept="image/*,.heic,.heif" multiple>
+
+    <div class="actions" id="actions">
+      <button class="action-btn zip-btn" id="zipBtn"></button>
+      <button class="action-btn clear-btn" id="clearBtn"></button>
+    </div>
+
+    <div class="results" id="results"></div>
+
+    <p class="footer" id="t-footer">🔒 すべてブラウザ内で処理され、写真はどこにも送信されません。</p>
+  </div>
+
+<script>
+  /* ====== 多言語辞書 ====== */
+  const i18n = {
+    ja: {
+      name: "日本語",
+      title: "📷 画像変換ツール",
+      subtitle: "iPhoneのHEIC写真を JPEG / PNG へ変換",
+      formatLabel: "出力フォーマット",
+      qualityLabel: "画質",
+      qualityLow: "低", qualityHigh: "高",
+      resizeLabel: "リサイズ（任意）",
+      resizeMode: "方法:",
+      dropText: "ここに画像をドラッグ＆ドロップ<br>またはタップして選択",
+      supportText: "HEIC / HEIF / PNG / JPEG / WebP 対応",
+      footer: "🔒 すべてブラウザ内で処理され、写真はどこにも送信されません。",
+      converting: "変換中...", failed: "変換失敗", download: "ダウンロード",
+      zip: "📦 ZIPで一括ダウンロード", clear: "クリア",
+      placeholder: "例: 1920"
+    },
+    en: {
+      name: "English",
+      title: "📷 Image Converter",
+      subtitle: "Convert iPhone HEIC photos to JPEG / PNG",
+      formatLabel: "Output Format",
+      qualityLabel: "Quality",
+      qualityLow: "Low", qualityHigh: "High",
+      resizeLabel: "Resize (optional)",
+      resizeMode: "Mode:",
+      dropText: "Drag & drop images here<br>or tap to select",
+      supportText: "Supports HEIC / HEIF / PNG / JPEG / WebP",
+      footer: "🔒 Everything is processed in your browser. Photos are never uploaded.",
+      converting: "Converting...", failed: "Failed", download: "Download",
+      zip: "📦 Download All as ZIP", clear: "Clear",
+      placeholder: "e.g. 1920"
+    },
+    zh: {
+      name: "中文",
+      title: "📷 图片转换工具",
+      subtitle: "将 iPhone 的 HEIC 照片转换为 JPEG / PNG",
+      formatLabel: "输出格式",
+      qualityLabel: "图片质量",
+      qualityLow: "低", qualityHigh: "高",
+      resizeLabel: "调整大小（可选）",
+      resizeMode: "方式:",
+      dropText: "将图片拖放到此处<br>或点击选择",
+      supportText: "支持 HEIC / HEIF / PNG / JPEG / WebP",
+      footer: "🔒 全部在浏览器内处理，照片绝不会被上传。",
+      converting: "转换中...", failed: "转换失败", download: "下载",
+      zip: "📦 打包下载 ZIP", clear: "清除",
+      placeholder: "例如: 1920"
+    },
+    ko: {
+      name: "한국어",
+      title: "📷 이미지 변환 도구",
+      subtitle: "iPhone HEIC 사진을 JPEG / PNG로 변환",
+      formatLabel: "출력 형식",
+      qualityLabel: "이미지 품질",
+      qualityLow: "낮음", qualityHigh: "높음",
+      resizeLabel: "크기 조정 (선택)",
+      resizeMode: "방식:",
+      dropText: "여기에 이미지를 드래그 앤 드롭<br>또는 탭하여 선택",
+      supportText: "HEIC / HEIF / PNG / JPEG / WebP 지원",
+      footer: "🔒 모든 처리는 브라우저 내에서 이루어지며 사진은 업로드되지 않습니다.",
+      converting: "변환 중...", failed: "변환 실패", download: "다운로드",
+      zip: "📦 ZIP으로 일괄 다운로드", clear: "지우기",
+      placeholder: "예: 1920"
+    },
+    ru: {
+      name: "Русский",
+      title: "📷 Конвертер изображений",
+      subtitle: "Конвертация фото HEIC с iPhone в JPEG / PNG",
+      formatLabel: "Формат вывода",
+      qualityLabel: "Качество",
+      qualityLow: "Низ.", qualityHigh: "Выс.",
+      resizeLabel: "Изменить размер (опц.)",
+      resizeMode: "Режим:",
+      dropText: "Перетащите изображения сюда<br>или нажмите для выбора",
+      supportText: "Поддержка HEIC / HEIF / PNG / JPEG / WebP",
+      footer: "🔒 Всё обрабатывается в браузере. Фото никуда не отправляются.",
+      converting: "Конвертация...", failed: "Ошибка", download: "Скачать",
+      zip: "📦 Скачать всё в ZIP", clear: "Очистить",
+      placeholder: "напр. 1920"
+    },
+    es: {
+      name: "Español",
+      title: "📷 Conversor de imágenes",
+      subtitle: "Convierte fotos HEIC de iPhone a JPEG / PNG",
+      formatLabel: "Formato de salida",
+      qualityLabel: "Calidad",
+      qualityLow: "Baja", qualityHigh: "Alta",
+      resizeLabel: "Redimensionar (opcional)",
+      resizeMode: "Modo:",
+      dropText: "Arrastra imágenes aquí<br>o toca para seleccionar",
+      supportText: "Compatible con HEIC / HEIF / PNG / JPEG / WebP",
+      footer: "🔒 Todo se procesa en tu navegador. Las fotos nunca se suben.",
+      converting: "Convirtiendo...", failed: "Error", download: "Descargar",
+      zip: "📦 Descargar todo en ZIP", clear: "Limpiar",
+      placeholder: "ej. 1920"
+    }
+  };
+
+  let currentLang = 'ja';
+  let convertedFiles = []; // {name, blob}
+
+  /* ====== 言語初期化 ====== */
+  const langSelect = document.getElementById('langSelect');
+  Object.keys(i18n).forEach(code => {
+    const opt = document.createElement('option');
+    opt.value = code;
+    opt.textContent = i18n[code].name;
+    langSelect.appendChild(opt);
+  });
+
+  function detectLang() {
+    const browser = (navigator.language || 'en').toLowerCase();
+    if (browser.startsWith('ja')) return 'ja';
+    if (browser.startsWith('zh')) return 'zh';
+    if (browser.startsWith('ko')) return 'ko';
+    if (browser.startsWith('ru')) return 'ru';
+    if (browser.startsWith('es')) return 'es';
+    return 'en';
+  }
+
+  function applyLang(code) {
+    currentLang = code;
+    const t = i18n[code];
+    document.documentElement.lang = code;
+    document.getElementById('t-title').textContent = t.title;
+    document.getElementById('t-subtitle').textContent = t.subtitle;
+    document.getElementById('t-formatLabel').textContent = t.formatLabel;
+    document.getElementById('t-qualityLabel').textContent = t.qualityLabel;
+    document.getElementById('t-qualityLow').textContent = t.qualityLow;
+    document.getElementById('t-qualityHigh').textContent = t.qualityHigh;
+    document.getElementById('t-resizeLabel').textContent = t.resizeLabel;
+    document.getElementById('t-resizeMode').textContent = t.resizeMode;
+    document.getElementById('t-dropText').innerHTML = t.dropText;
+    document.getElementById('t-supportText').textContent = t.supportText;
+    document.getElementById('t-footer').textContent = t.footer;
+    document.getElementById('zipBtn').textContent = t.zip;
+    document.getElementById('clearBtn').textContent = t.clear;
+    document.getElementById('resizeValue').placeholder = t.placeholder;
+    langSelect.value = code;
+  }
+
+  langSelect.addEventListener('change', () => applyLang(langSelect.value));
+  applyLang(detectLang());
+
+  /* ====== フォーマット選択 ====== */
+  let targetFormat = 'jpeg';
+  document.querySelectorAll('.format-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.format-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      targetFormat = btn.dataset.format;
+    });
+  });
+
+  /* ====== 画質スライダー ====== */
+  const qualitySlider = document.getElementById('qualitySlider');
+  const qualityVal = document.getElementById('qualityVal');
+  qualitySlider.addEventListener('input', () => {
+    qualityVal.textContent = qualitySlider.value + '%';
+  });
+
+  /* ====== リサイズ設定 ====== */
+  const resizeMode = document.getElementById('resizeMode');
+  const resizeValue = document.getElementById('resizeValue');
+  resizeMode.addEventListener('change', () => {
+    if (resizeMode.value === 'none') {
+      resizeValue.style.display = 'none';
+    } else {
+      resizeValue.style.display = 'inline-block';
+      resizeValue.value = resizeMode.value === 'percent' ? '80' : '1920';
+    }
+  });
+
+  /* ====== ファイル処理 ====== */
+  const dropZone = document.getElementById('dropZone');
+  const fileInput = document.getElementById('fileInput');
+  const results = document.getElementById('results');
+  const actions = document.getElementById('actions');
+
+  dropZone.addEventListener('click', () => fileInput.click());
+  dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('dragover'); });
+  dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
+  dropZone.addEventListener('drop', e => {
+    e.preventDefault();
+    dropZone.classList.remove('dragover');
+    handleFiles(e.dataTransfer.files);
+  });
+  fileInput.addEventListener('change', () => handleFiles(fileInput.files));
+
+  async function handleFiles(files) {
+    for (const file of files) {
+      await convertFile(file);
+    }
+  }
+
+  function formatSize(bytes) {
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+    return (bytes / 1024 / 1024).toFixed(2) + ' MB';
+  }
+
+  async function convertFile(file) {
+    const t = i18n[currentLang];
+    const item = document.createElement('div');
+    item.className = 'result-item';
+    const baseName = file.name.replace(/\.[^.]+$/, '');
+    const ext = targetFormat === 'jpeg' ? 'jpg' : 'png';
+    const mime = targetFormat === 'jpeg' ? 'image/jpeg' : 'image/png';
+    const outName = `${baseName}.${ext}`;
+
+    item.innerHTML = `<div class="result-info"><div class="name">${file.name}</div></div><span class="status">${t.converting}</span>`;
+    results.prepend(item);
+
+    try {
+      let sourceBlob = file;
+      const isHeic = /\.(heic|heif)$/i.test(file.name) || file.type === 'image/heic' || file.type === 'image/heif';
+
+      // HEICはまずPNGに変換してからCanvasで処理
+      if (isHeic) {
+        let heicResult = await heic2any({ blob: file, toType: 'image/png' });
+        if (Array.isArray(heicResult)) heicResult = heicResult[0];
+        sourceBlob = heicResult;
+      }
+
+      const finalBlob = await processImage(sourceBlob, mime);
+
+      convertedFiles.push({ name: outName, blob: finalBlob });
+      const url = URL.createObjectURL(finalBlob);
+      item.innerHTML = `
+        <div class="result-info">
+          <div class="name">${outName}</div>
+          <div class="size">${formatSize(finalBlob.size)}</div>
+        </div>
+        <a class="download-btn" href="${url}" download="${outName}">${t.download}</a>
+      `;
+      actions.classList.add('show');
+    } catch (err) {
+      console.error(err);
+      item.innerHTML = `<div class="result-info"><div class="name">${file.name}</div></div><span class="error">${t.failed}</span>`;
+    }
+  }
+
+  // Canvasで画質・リサイズ処理
+  function processImage(blob, mime) {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => {
+        let w = img.width, h = img.height;
+        const mode = resizeMode.value;
+        const val = parseFloat(resizeValue.value);
+
+        if (mode !== 'none' && val > 0) {
+          if (mode === 'maxwidth' && w > val) {
+            h = Math.round(h * (val / w)); w = val;
+          } else if (mode === 'maxheight' && h > val) {
+            w = Math.round(w * (val / h)); h = val;
+          } else if (mode === 'percent') {
+            w = Math.round(w * val / 100); h = Math.round(h * val / 100);
+          }
+        }
+
+        const canvas = document.createElement('canvas');
+        canvas.width = w; canvas.height = h;
+        const ctx = canvas.getContext('2d');
+        if (mime === 'image/jpeg') {
+          ctx.fillStyle = '#fff';
+          ctx.fillRect(0, 0, w, h);
+        }
+        ctx.drawImage(img, 0, 0, w, h);
+
+        const quality = parseInt(qualitySlider.value) / 100;
+        canvas.toBlob(
+          b => b ? resolve(b) : reject('toBlob failed'),
+          mime,
+          mime === 'image/jpeg' ? quality : undefined
+        );
+      };
+      img.onerror = reject;
+      img.src = URL.createObjectURL(blob);
+    });
+  }
+
+  /* ====== ZIP一括ダウンロード ====== */
+  document.getElementById('zipBtn').addEventListener('click', async () => {
+    if (convertedFiles.length === 0) return;
+    const zip = new JSZip();
+    const nameCount = {};
+    convertedFiles.forEach(f => {
+      let name = f.name;
+      if (nameCount[name] !== undefined) {
+        nameCount[name]++;
+        const dot = name.lastIndexOf('.');
+        name = name.slice(0, dot) + '_' + nameCount[name] + name.slice(dot);
+      } else {
+        nameCount[name] = 0;
+      }
+      zip.file(name, f.blob);
+    });
+    const content = await zip.generateAsync({ type: 'blob' });
+    const url = URL.createObjectURL(content);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'converted_images.zip';
+    a.click();
+    URL.revokeObjectURL(url);
+  });
+
+  /* ====== クリア ====== */
+  document.getElementById('clearBtn').addEventListener('click', () => {
+    convertedFiles = [];
+    results.innerHTML = '';
+    actions.classList.remove('show');
+    fileInput.value = '';
+  });
+</script>
+</body>
+</html>
